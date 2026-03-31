@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>트릭컬 픽업 엘다인 뽑기 시뮬레이터</title>
+    <style>
+        :root { --purple: #673ab7; --gold: #ffd700; --eldain: #ff5722; --bg: #1a1a1a; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: var(--bg); color: #fff; display: flex; flex-direction: column; align-items: center; padding: 15px; margin: 0; min-height: 100vh; }
+        
+        .container { background: #2d2d2d; padding: 20px; border-radius: 20px; width: 100%; max-width: 450px; border: 2px solid #444; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { font-size: 1.1rem; color: var(--gold); margin: 0 0 15px; text-align: center; }
+
+        /* 통계 영역 */
+        .stats-panel { background: #1f1f1f; padding: 15px; border-radius: 12px; margin-bottom: 12px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 11px; text-align: center; }
+        .val { font-size: 15px; font-weight: bold; display: block; margin-top: 4px; }
+        .full-width { grid-column: span 3; border-top: 1px solid #333; padding-top: 8px; margin-top: 5px; display: flex; justify-content: space-between; align-items: center; }
+
+        /* 확률 정보 */
+        .prob-info { background: #252525; padding: 10px; border-radius: 10px; margin-bottom: 15px; font-size: 11px; color: #bbb; border-left: 4px solid var(--eldain); line-height: 1.4; }
+
+        /* 버튼 */
+        .btn-group { display: flex; gap: 8px; margin-bottom: 15px; }
+        button { flex: 1; padding: 15px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; color: #fff; box-shadow: 0 4px 0 rgba(0,0,0,0.3); transition: transform 0.05s; }
+        .btn-1 { background: #5e35b1; }
+        .btn-10 { background: #3949ab; }
+        .btn-reset { background: #b71c1c; flex: 0.4; font-size: 11px; }
+        button:active { transform: translateY(2px); box-shadow: none; }
+
+        /* 가챠 결과 */
+        #display-area { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; min-height: 120px; margin-bottom: 15px; padding: 10px; background: #252525; border-radius: 12px; }
+        .card { height: 55px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; position: relative; }
+        
+        .rank-1 { background: #424242; color: #888; }
+        .rank-2 { background: #7e57c2; color: #fff; box-shadow: 0 0 5px rgba(126, 87, 194, 0.4); }
+        .rank-3 { background: #fbc02d; color: #000; box-shadow: 0 0 8px rgba(251, 192, 45, 0.5); }
+        .rank-eldain { background: linear-gradient(135deg, #ff5722, #ffeb3b); color: #fff; border: 2px solid #fff; box-shadow: 0 0 15px #ff5722; animation: flash 0.3s; }
+        
+        @keyframes flash { from { filter: brightness(2); } to { filter: brightness(1); } }
+        .g-mark { position: absolute; top: -3px; left: -2px; font-size: 7px; background: #e91e63; color: white; padding: 1px 2px; border-radius: 3px; z-index: 2; box-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+
+        #log { font-size: 12px; height: 110px; overflow-y: auto; background: #1a1a1a; padding: 10px; border-radius: 8px; color: #999; }
+        .log-hit { color: var(--eldain); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>엘다인 픽업 시뮬레이터</h1>
+    
+    <div class="prob-info">
+        💡 <b>확률 구성:</b> 엘다인 0.6% | 3성 2.4% | <b>2성 21%</b> | 1성 76%<br>
+    </div>
+
+    <div class="stats-panel">
+        <div>총 횟수<span id="total" class="val">0</span></div>
+        <div style="color:var(--eldain)">픽업 엘다인<span id="eldain" class="val">0</span></div>
+        <div style="color:var(--gold)">일반 3성<span id="normal3" class="val">0</span></div>
+        <div class="full-width">
+            <span style="color:#888">엘리프: <span id="elif" style="color:#fff">0</span></span>
+            <button class="btn-reset" onclick="resetAll()">리셋</button>
+        </div>
+    </div>
+
+    <div class="btn-group">
+        <button class="btn-1" onclick="pull(1)">단차</button>
+        <button class="btn-10" onclick="pull(10)">10연차</button>
+    </div>
+
+    <div id="display-area"></div>
+    <div id="log"></div>
+</div>
+
+<script>
+    function getSecureRandom() {
+        const array = new Uint32Array(1);
+        window.crypto.getRandomValues(array);
+        return array[0] / (0xffffffff + 1);
+    }
+
+    let stats = { total: 0, eldain: 0, normal3: 0, elif: 0 };
+    // 이미지 기반 정밀 확률 세팅
+    const RATES = { 
+        ELDAIN: 0.006, 
+        NORMAL3: 0.024, 
+        RANK2: 0.21,   // 21% 반영
+        RANK1: 0.76    // 나머지 76%
+    };
+
+    function pull(count) {
+        const display = document.getElementById('display-area');
+        display.innerHTML = ''; 
+
+        // 10연차일 때 랜덤하게 한 칸을 확정 칸으로 지정
+        let guaranteedIndex = (count === 10) ? Math.floor(getSecureRandom() * 10) : -1;
+
+        for (let i = 0; i < count; i++) {
+            stats.total++;
+            stats.elif += 100;
+            
+            const isGuaranteed = (i === guaranteedIndex);
+            const res = calculate(isGuaranteed);
+
+            const card = document.createElement('div');
+            card.className = `card ${res.class}`;
+            card.innerText = res.name;
+            
+            if (isGuaranteed) {
+                card.innerHTML += '<span class="g-mark">2성↑</span>'; 
+            }
+            display.appendChild(card);
+
+            if(res.isEldain) {
+                stats.eldain++;
+                addLog(`<span class="log-hit">✨ [${stats.total}회] 엘다인 획득!</span>`);
+            } else if (res.isThree) {
+                stats.normal3++;
+                addLog(`<span style="color:var(--gold)">💎 [${stats.total}회] 일반 3성</span>`);
+            }
+        }
+        updateUI();
+    }
+
+    function calculate(isGuaranteed) {
+        const rand = getSecureRandom();
+        if (isGuaranteed) {
+            // 2성 이상 확정 칸: (0.6 + 2.4 + 21 = 24%) 범위 내에서 재분배
+            const pool = RATES.ELDAIN + RATES.NORMAL3 + RATES.RANK2;
+            const gRand = rand * pool;
+            if (gRand < RATES.ELDAIN) return { name: "엘다인", class: "rank-eldain", isEldain: true };
+            if (gRand < RATES.ELDAIN + RATES.NORMAL3) return { name: "★3", class: "rank-3", isThree: true };
+            return { name: "★2", class: "rank-2" };
+        } else {
+            // 일반 칸 확률 로직
+            if (rand < RATES.ELDAIN) return { name: "엘다인", class: "rank-eldain", isEldain: true };
+            if (rand < RATES.ELDAIN + RATES.NORMAL3) return { name: "★3", class: "rank-3", isThree: true };
+            if (rand < RATES.ELDAIN + RATES.NORMAL3 + RATES.RANK2) return { name: "★2", class: "rank-2" };
+            return { name: "★1", class: "rank-1" };
+        }
+    }
+
+    function updateUI() {
+        document.getElementById('total').innerText = stats.total;
+        document.getElementById('eldain').innerText = stats.eldain;
+        document.getElementById('normal3').innerText = stats.normal3;
+        document.getElementById('elif').innerText = stats.elif.toLocaleString();
+    }
+
+    function addLog(msg) {
+        const log = document.getElementById('log');
+        const entry = document.createElement('div');
+        entry.innerHTML = msg;
+        log.prepend(entry);
+    }
+
+    function resetAll() {
+        if(confirm("모든 기록을 초기화하시겠습니까?")) {
+            stats = { total: 0, eldain: 0, normal3: 0, elif: 0 };
+            document.getElementById('display-area').innerHTML = '';
+            document.getElementById('log').innerHTML = '';
+            updateUI();
+        }
+    }
+</script>
+
+</body>
+</html>
