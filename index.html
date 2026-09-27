@@ -125,19 +125,31 @@
     function calculate(isGuaranteed) {
         const rand = getSecureRandom();
         if (isGuaranteed) {
-            // 2성 이상 확정 칸: (0.6 + 2.4 + 21 = 24%) 범위 내에서 재분배
-            const pool = RATES.ELDAIN + RATES.NORMAL3 + RATES.RANK2;
-            const gRand = rand * pool;
-            if (gRand < RATES.ELDAIN) return { name: "엘다인", class: "rank-eldain", isEldain: true };
-            if (gRand < RATES.ELDAIN + RATES.NORMAL3) return { name: "★3", class: "rank-3", isThree: true };
-            return { name: "★2", class: "rank-2" };
-        } else {
-            // 일반 칸 확률 로직
-            if (rand < RATES.ELDAIN) return { name: "엘다인", class: "rank-eldain", isEldain: true };
-            if (rand < RATES.ELDAIN + RATES.NORMAL3) return { name: "★3", class: "rank-3", isThree: true };
-            if (rand < RATES.ELDAIN + RATES.NORMAL3 + RATES.RANK2) return { name: "★2", class: "rank-2" };
-            return { name: "★1", class: "rank-1" };
-        }
+    // 2성 이상 확정
+    // 엘다인/3성 확률은 그대로 유지하고,
+    // 1성 확률만 2성으로 이동
+
+    if (rand < RATES.ELDAIN) {
+        return {
+            name: "엘다인",
+            class: "rank-eldain",
+            isEldain: true
+        };
+    }
+
+    if (rand < RATES.ELDAIN + RATES.NORMAL3) {
+        return {
+            name: "★3",
+            class: "rank-3",
+            isThree: true
+        };
+    }
+
+    return {
+        name: "★2",
+        class: "rank-2"
+    };
+}
     }
 
     function updateUI() {
